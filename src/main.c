@@ -9,7 +9,7 @@
 
 static struct termios old_term, new_term;
 static uint16_t remaining; // in seconds
-static uint8_t is_paused;
+static uint8_t status;     // 000000AB, A - is_paused, B - has_executed_command
 
 static void bye(void);
 static void handle_interupt(int signal_num);
@@ -26,10 +26,10 @@ int main(int argc, char **argv) {
 
   parse_args(argc, argv, &args);
 
-  if (args.type == 's') {
-    remaining = start_time = args.amount;
-  } else {
+  if ((args.data >> 1) & 1) {
     remaining = start_time = args.amount * 60;
+  } else {
+    remaining = start_time = args.amount;
   }
 
   atexit(bye);
@@ -51,36 +51,55 @@ int main(int argc, char **argv) {
   // clock width)
   write(STDOUT_FILENO, "\x1B[7D", 4);
 
-  while (!args.is_lonely) {
+  while (~args.data & 1) {
     read(STDIN_FILENO, &ch, 1);
 
-    if (ch == 'q')
-      break;
+    if (remaining == 0 && !(status & 1)) {
+      if ((args.data >> 2) > 0) {
+        system(args.command);
+      } else {
+        system(DEFAULT_COMMAND);
+      }
 
-    if (ch == 'j' && remaining > 5) {
+      status = 3; // 00000011 = is paused and has executed
+    }
+
+    if (ch == 'q') {
+      break;
+    } else if (ch == 'r') {
+      remaining = start_time;
+      status = 0;
+      alarm(1);
+    } else if (ch == 'j' && remaining > 5) {
       remaining -= 5;
 
-      // We also check that start_time > 5, because it is unsigned, otherwise it
-      // would overflow and becone n^16 - 1, which then would ofcourse be bigger
-      // than remaining
+      // We also check that start_time > 5, because it is unsigned, otherwise
+      // it would overflow and becone n^16 - 1, which then would ofcourse be
+      // bigger than remaining
     } else if (ch == 'k' && start_time > 5 && remaining < start_time - 5) {
       remaining += 5;
+
+      status = 0; // 00000000, meaning, resume the timer and reset has_executed
+      alarm(1);
     } else if (ch == 'J' && remaining > 60) {
       remaining -= 60;
     } else if (ch == 'K' && start_time > 60 && remaining < start_time - 60) {
       remaining += 60;
+
+      status = 0; // 00000000, meaning, resume the timer and reset has_executed
+      alarm(1);
     } else if (ch == ' ') {
-      /* If its already paused, it means we want it resumed, is_paused will be
-         1, so alarm(1) will start a timer for one second
-         If its not already paused, it means we want it paused, is_paused will
-         be 0, and alarm(0) will cancel any pending alarm
+      /* If its already paused, it means we want it resumed, status will be
+         0000001B, so alarm(1) will start a timer for one second
+         If its not already paused, it means we want it paused, status will be
+         0000000B, and alarm(0) will cancel any pending alarm
          https://man.archlinux.org/man/alarm.2.en
          Only problem is that if you paused with, for example, 200ms before the
          secound would pass, when resuming it would wait a full second, thus
          adding 800ms in plus, but its minuscule */
-      alarm(is_paused);
+      alarm(status >> 1);
 
-      is_paused = !is_paused;
+      status ^= 1 << 1; // 00000010, will flip the A bit (the is_paused)
     }
 
     printf(RED "\x1B[1A\x1B[5D%02hu:%02hu", remaining / 60, remaining % 60);
@@ -123,6 +142,6 @@ static void init_term() {
 static void handle_alarm_signal(int signal) {
   remaining--;
 
-  if (remaining != 0 && !is_paused)
+  if (remaining != 0 && ~status >> 1)
     alarm(1);
 }

@@ -7,7 +7,9 @@
 #define SHOW_CURSOR "\x1B[?25h"
 #define HIDE_CURSOR "\x1B[?25l"
 
+#define DEFAULT_COMMAND "/home/niki/dev/scripts/alarm.sh"
+
 #define CONTROLS                                                               \
   RED "j" BLUE " -5s " RED "k" BLUE " +5s " RED "J" BLUE " -1m " RED "K" BLUE  \
-      " +1m " RED "space" BLUE " pause " RED "q" BLUE " quit :(" RESET
+      " +1m " RED "space" BLUE " pause " RED "r" BLUE " reset " RED "q" BLUE " quit :(" RESET
 
