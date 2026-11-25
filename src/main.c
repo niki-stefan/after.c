@@ -24,13 +24,28 @@ int main(int argc, char **argv) {
 
   parse_args(argc, argv, &args);
 
-  init_term();
-
   if (args.type == 'm') {
     remaining = start_time = args.amount * 60;
   } else {
     remaining = start_time = args.amount;
   }
+
+  if (args.is_lonely) {
+    int pid = fork();
+
+    if (pid == 0) {
+      sleep(remaining);
+
+      system(args.command);
+
+      exit(0);
+    } else {
+      // If this is the parent, exit
+      exit(0);
+    }
+  }
+
+  init_term();
 
   atexit(bye);
 
@@ -53,7 +68,7 @@ int main(int argc, char **argv) {
 
   alarm(1);
 
-  while (!args.is_lonely) {
+  while (1) {
     read(STDIN_FILENO, &ch, 1);
 
     if (remaining == 0 && !(status & 1)) {
@@ -164,8 +179,12 @@ static void init_term(void) {
 }
 
 static void handle_alarm_signal(__attribute__((unused)) int signal) {
+  if (remaining == 0)
+    return;
+
   remaining--;
 
-  if (remaining != 0 && ~status >> 1)
+  // not paused
+  if (~status >> 1)
     alarm(1);
 }

@@ -22,9 +22,10 @@ void parse_args(int argc, char **argv, struct args *args) {
 
       cmdlen = strlen(argv[i + 1]);
 
-      args->command = malloc(cmdlen + 1);
+      args->command = malloc(cmdlen + REDIRECT_LEN + 1);
       strcpy(args->command, argv[++i]);
-      args->command[cmdlen - 1] = '\0';
+      strcat(args->command, REDIRECT);
+      args->command[cmdlen + REDIRECT_LEN] = '\0';
 
       continue;
     } else if (strcmp(argv[i], "-lonely") == 0) {
@@ -53,8 +54,9 @@ void parse_args(int argc, char **argv, struct args *args) {
   if (args->command == NULL) {
     cmdlen = strlen(DEFAULT_COMMAND);
 
-    args->command = malloc(cmdlen + 1);
+    args->command = malloc(cmdlen + REDIRECT_LEN + 1);
     strcpy(args->command, DEFAULT_COMMAND);
-    args->command[cmdlen] = '\0';
+    strcat(args->command, REDIRECT);
+    args->command[cmdlen + REDIRECT_LEN] = '\0';
   }
 }
