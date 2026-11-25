@@ -9,6 +9,7 @@
 
 static struct termios old_term, new_term;
 static uint16_t remaining; // in seconds
+static uint8_t is_paused;
 
 static void bye(void);
 static void handle_interupt(int signal_num);
@@ -56,6 +57,32 @@ int main(int argc, char **argv) {
     if (ch == 'q')
       break;
 
+    if (ch == 'j' && remaining > 5) {
+      remaining -= 5;
+
+      // We also check that start_time > 5, because it is unsigned, otherwise it
+      // would overflow and becone n^16 - 1, which then would ofcourse be bigger
+      // than remaining
+    } else if (ch == 'k' && start_time > 5 && remaining < start_time - 5) {
+      remaining += 5;
+    } else if (ch == 'J' && remaining > 60) {
+      remaining -= 60;
+    } else if (ch == 'K' && start_time > 60 && remaining < start_time - 60) {
+      remaining += 60;
+    } else if (ch == ' ') {
+      /* If its already paused, it means we want it resumed, is_paused will be
+         1, so alarm(1) will start a timer for one second
+         If its not already paused, it means we want it paused, is_paused will
+         be 0, and alarm(0) will cancel any pending alarm
+         https://man.archlinux.org/man/alarm.2.en
+         Only problem is that if you paused with, for example, 200ms before the
+         secound would pass, when resuming it would wait a full second, thus
+         adding 800ms in plus, but its minuscule */
+      alarm(is_paused);
+
+      is_paused = !is_paused;
+    }
+
     printf(RED "\x1B[1A\x1B[5D%02hu:%02hu", remaining / 60, remaining % 60);
     printf(BLUE "\x1B[1B\x1B[5D%02hu:%02hu" RESET,
            (start_time - remaining) / 60, (start_time - remaining) % 60);
@@ -96,6 +123,6 @@ static void init_term() {
 static void handle_alarm_signal(int signal) {
   remaining--;
 
-  if (remaining != 0)
+  if (remaining != 0 && !is_paused)
     alarm(1);
 }
