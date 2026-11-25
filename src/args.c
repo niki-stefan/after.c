@@ -1,14 +1,14 @@
 #include "args.h"
+#include "magic_numbers.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 void parse_args(int argc, char **argv, struct args *args) {
   uint8_t i, cmdlen;
-  char type;
 
-  args->data = 0;
-  args->amount = 0;
+  args->is_lonely = 0;
 
   // The first argument is the file name, so skip it
   for (i = 1; i < argc; i++) {
@@ -22,25 +22,18 @@ void parse_args(int argc, char **argv, struct args *args) {
 
       cmdlen = strlen(argv[i + 1]);
 
-      if (cmdlen >= 63) {
-        puts("Command cannot be longer than 63 letters");
-
-        exit(1);
-      }
-
+      args->command = malloc(cmdlen + 1);
       strcpy(args->command, argv[++i]);
-      args->data = cmdlen << 2;
+      args->command[cmdlen - 1] = '\0';
 
       continue;
     } else if (strcmp(argv[i], "-lonely") == 0) {
-      args->data |= 1; // Set the last bit to 1
+      args->is_lonely = 1;
     } else if (argv[i][0] > '0' && argv[i][0] < '9') {
-      sscanf(argv[i], "%hhu%c", &args->amount, &type);
+      sscanf(argv[i], "%hu%c", &args->amount, &args->type);
 
-      args->data |= (type == 'm') << 1;
-
-      if (type != 's' && type != 'm') {
-        printf("What is \"%hhu%c\" bro?\n", args->amount, type);
+      if (args->type != 's' && args->type != 'm') {
+        printf("What is \"%hhu%c\" bro?\n", args->amount, args->type);
 
         exit(1);
       }
@@ -49,5 +42,19 @@ void parse_args(int argc, char **argv, struct args *args) {
 
       exit(1);
     }
+  }
+
+  if (args->amount == 0) {
+    puts("That ended yesterday! (amount to wait was 0)");
+
+    exit(1);
+  }
+
+  if (args->command == NULL) {
+    cmdlen = strlen(DEFAULT_COMMAND);
+
+    args->command = malloc(cmdlen + 1);
+    strcpy(args->command, DEFAULT_COMMAND);
+    args->command[cmdlen] = '\0';
   }
 }

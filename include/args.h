@@ -2,10 +2,12 @@
 
 #include <stdint.h>
 
+// size will be 8ch* + 2int + 1cha + 1int (12, until 2 * 8 = 16 we need 6 pad) + 6pad = 16
 struct args {
-  uint8_t amount; // max is 2**sizeof(uint8_t) - 1 = 2**8 - 1 = 255
-  uint8_t data; // ABCDEFXY, ABCDEF - command length (max 2^6 - 1 = 63), X - 0 => s; 1 => m, Y = is_lonely
-  char command[63];
+  char *command;
+  uint16_t amount; // max is 2**sizeof(uint16_t) - 1 = 2**16 - 1 = 65535 */
+  char type;
+  uint8_t is_lonely;
 };
 
 void parse_args(int argc, char **argv, struct args *args);

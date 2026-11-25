@@ -1,3 +1,5 @@
+#pragma once
+
 #define RED "\x1B[38;5;167m"
 #define BLUE "\x1B[38;5;29m"
 #define YELLOW "\x1B[38;5;143m"

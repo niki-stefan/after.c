@@ -13,7 +13,7 @@ static uint8_t status;     // 000000AB, A - is_paused, B - has_executed_command
 
 static void bye(void);
 static void handle_interupt(int signal_num);
-static void init_term();
+static void init_term(void);
 static void handle_alarm_signal(int signal);
 
 int main(int argc, char **argv) {
@@ -22,11 +22,11 @@ int main(int argc, char **argv) {
 
   uint16_t start_time = 0;
 
-  init_term();
-
   parse_args(argc, argv, &args);
 
-  if ((args.data >> 1) & 1) {
+  init_term();
+
+  if (args.type == 'm') {
     remaining = start_time = args.amount * 60;
   } else {
     remaining = start_time = args.amount;
@@ -34,32 +34,30 @@ int main(int argc, char **argv) {
 
   atexit(bye);
 
-  printf(HIDE_CURSOR);
-  printf(YELLOW "after.c" PURPLE " %02hu:%02hu    " CONTROLS "\n" RED
-                "  00:00 remaning\n" BLUE "  00:00 passed" RESET,
+  printf(HIDE_CURSOR YELLOW "after.c" PURPLE " %02hu:%02hu    " CONTROLS
+                            "\n" RED "  00:00 remaning\n" BLUE
+                            "  00:00 passed" RESET,
          start_time / 60, start_time % 60);
+
+  // We move the cursor after the time (12 is the start of the line - 5 the
+  // clock width)
+  printf("\x1B[7D");
 
   // printf flushes at \n
   fflush(stdout);
 
   // Notice: its alrm not alArm 😃
   // https://stackoverflow.com/questions/3879230/blocking-non-blocking-timer-in-c
+  signal(SIGINT, handle_interupt);
   signal(SIGALRM, handle_alarm_signal);
+
   alarm(1);
 
-  // We move the cursor after the time (12 is the start of the line - 5 the
-  // clock width)
-  write(STDOUT_FILENO, "\x1B[7D", 4);
-
-  while (~args.data & 1) {
+  while (!args.is_lonely) {
     read(STDIN_FILENO, &ch, 1);
 
     if (remaining == 0 && !(status & 1)) {
-      if ((args.data >> 2) > 0) {
-        system(args.command);
-      } else {
-        system(DEFAULT_COMMAND);
-      }
+      system(args.command);
 
       status = 3; // 00000011 = is paused and has executed
     }
@@ -70,24 +68,49 @@ int main(int argc, char **argv) {
       remaining = start_time;
       status = 0;
       alarm(1);
-    } else if (ch == 'j' && remaining > 5) {
-      remaining -= 5;
+    } else if (ch == 'j') {
+      if (remaining < 5) {
+        remaining = 0;
+        status = 2; // 00000010 = is paused but has not executed
+        alarm(0);
+      } else {
+        remaining -= 5;
+      }
+    } else if (ch == 'k') {
+      /* We also check that start_time > 5, because it is unsigned, otherwise
+         it would overflow and becone n^16 - 1, which then would ofcourse be
+         bigger than remaining */
+      if (start_time <= 5 || remaining < start_time - 5) {
+        remaining = start_time;
+      } else {
+        remaining += 5;
+      }
 
-      // We also check that start_time > 5, because it is unsigned, otherwise
-      // it would overflow and becone n^16 - 1, which then would ofcourse be
-      // bigger than remaining
-    } else if (ch == 'k' && start_time > 5 && remaining < start_time - 5) {
-      remaining += 5;
-
-      status = 0; // 00000000, meaning, resume the timer and reset has_executed
-      alarm(1);
+      if (status & 1) {
+        status =
+            0; // 00000000, meaning, resume the timer and reset has_executed
+        alarm(1);
+      }
     } else if (ch == 'J' && remaining > 60) {
-      remaining -= 60;
-    } else if (ch == 'K' && start_time > 60 && remaining < start_time - 60) {
-      remaining += 60;
+      if (remaining < 60) {
+        remaining = 0;
+        status = 2; // 00000010 = is paused but has not executed
+        alarm(0);
+      } else {
+        remaining -= 60;
+      }
+    } else if (ch == 'K') {
+      if (start_time < 60 || remaining < start_time - 60) {
+        remaining = start_time;
+      } else {
+        remaining += 60;
+      }
 
-      status = 0; // 00000000, meaning, resume the timer and reset has_executed
-      alarm(1);
+      if (status & 1) {
+        status =
+            0; // 00000000, meaning, resume the timer and reset has_executed
+        alarm(1);
+      }
     } else if (ch == ' ') {
       /* If its already paused, it means we want it resumed, status will be
          0000001B, so alarm(1) will start a timer for one second
@@ -102,6 +125,7 @@ int main(int argc, char **argv) {
       status ^= 1 << 1; // 00000010, will flip the A bit (the is_paused)
     }
 
+    // A - up, B - down, C - right, D - left
     printf(RED "\x1B[1A\x1B[5D%02hu:%02hu", remaining / 60, remaining % 60);
     printf(BLUE "\x1B[1B\x1B[5D%02hu:%02hu" RESET,
            (start_time - remaining) / 60, (start_time - remaining) % 60);
@@ -121,25 +145,25 @@ static void bye(void) {
   tcsetattr(STDIN_FILENO, TCSANOW, &old_term);
 }
 
-static void handle_interupt(int signal_num) {
+static void handle_interupt(__attribute__((unused)) int signal_num) {
   bye();
 
   exit(0);
 }
 
-static void init_term() {
+static void init_term(void) {
   tcgetattr(STDIN_FILENO, &old_term);
   new_term = old_term;
 
   // https://en.wikibooks.org/wiki/Serial_Programming/termios
-  new_term.c_lflag &= ~(ICANON | ECHO | ISIG | ECHONL);
+  new_term.c_lflag &= ~(ICANON | ECHO | ECHONL);
   new_term.c_cc[VMIN] = 0;
   new_term.c_cc[VTIME] = 1;
 
   tcsetattr(STDIN_FILENO, TCSANOW, &new_term);
 }
 
-static void handle_alarm_signal(int signal) {
+static void handle_alarm_signal(__attribute__((unused)) int signal) {
   remaining--;
 
   if (remaining != 0 && ~status >> 1)
